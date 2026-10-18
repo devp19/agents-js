@@ -421,16 +421,24 @@ export class ToolExecutor {
     await replyTask?.result;
   }
 
-  async enqueueReply(
+  /** Commit a tool update even when it does not request a follow-up reply. */
+  private async recordUpdate(
     ctx: RunContext<any>,
     items: [FunctionCall, FunctionCallOutput],
-  ): Promise<void> {
+  ): Promise<ToolExecutorAgent> {
     const target = this.owningActivity?.agent ?? getCurrentAgent(ctx.session);
     const chatCtx = target.chatCtx.copy();
     chatCtx.insert(items);
     await target.updateChatCtx(chatCtx);
     ctx.session.history.insert(items);
+    return target;
+  }
 
+  async enqueueReply(
+    ctx: RunContext<any>,
+    items: [FunctionCall, FunctionCallOutput],
+  ): Promise<void> {
+    const target = await this.recordUpdate(ctx, items);
     this.pendingUpdates.push({ ctx, items, target });
     if (this._replyTask === undefined || this._replyTaskDone) {
       this._replyTaskDone = false;
@@ -533,7 +541,11 @@ export class ToolExecutor {
     const pair = runCtx._makeUpdatePair(output, '_final');
     pair[1].isError = exception !== undefined;
     runCtx._recordUpdatePair(pair);
-    await this.enqueueReply(runCtx, pair);
+    if (output === null || output === undefined) {
+      await this.recordUpdate(runCtx, pair);
+    } else {
+      await this.enqueueReply(runCtx, pair);
+    }
   }
 
   private async checkDuplicate(

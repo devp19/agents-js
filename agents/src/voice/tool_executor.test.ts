@@ -100,11 +100,12 @@ describe('ToolExecutor', () => {
     expect(agent.chatCtx.items.some((item) => item.type === 'function_call_output')).toBe(true);
   });
 
-  it.each([null, undefined])(
+  it.each([null, undefined, ''])(
     'delivers an empty final return after progress (%s)',
     async (output) => {
       const executor = new ToolExecutor();
       const { runCtx, history, agent } = buildRunContext();
+      const reply = vi.spyOn(runCtx.session, 'generateReply');
       const release = new Future<void>();
       const lookup = tool({
         name: 'slow_lookup',
@@ -132,6 +133,7 @@ describe('ToolExecutor', () => {
         });
       }
       expect(runCtx.updates.at(-1)?.[1].output).toBe('');
+      expect(reply).toHaveBeenCalledTimes(output === '' ? 1 : 0);
       expect(executor.hasRunningTasks).toBe(false);
     },
   );
@@ -244,6 +246,7 @@ describe('ToolExecutor', () => {
         description: '',
         execute: async (_, { ctx }) => {
           await ctx.update('working');
+          await ctx.update('still working');
           return output;
         },
       });
