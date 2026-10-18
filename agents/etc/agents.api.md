@@ -3834,6 +3834,7 @@ export interface FunctionTool<Parameters extends JSONObject = JSONObject, UserDa
     execute: ToolExecuteFunction<Parameters, UserData, Result>;
     // (undocumented)
     flags: number;
+    meta?: Record<string, unknown>;
     name: string;
     // (undocumented)
     onDuplicate: DuplicateMode;
@@ -7976,6 +7977,7 @@ export function tool<UserData = UnknownUserData, Schema extends ToolInputSchema<
 Result = unknown>(input: {
     name: string;
     description: string;
+    meta?: Record<string, unknown>;
     parameters?: Schema;
     execute: ToolExecuteFunction<ToolArgs<Schema>, UserData, Result>;
     flags?: number;
@@ -7987,6 +7989,7 @@ export function tool<UserData = UnknownUserData, Schema extends ToolInputSchema<
 Result = unknown>(input: {
     name?: never;
     description: string;
+    meta?: Record<string, unknown>;
     parameters?: Schema;
     execute: ToolExecuteFunction<ToolArgs<Schema>, UserData, Result>;
     flags?: number;
@@ -9397,8 +9400,8 @@ export const zipFunctionCallsAndOutputs: (event: FunctionToolsExecutedEvent) => 
 // src/_exceptions.ts:128:5 - (ae-forgotten-export) The symbol "APIErrorOptions" needs to be exported by the entry point index.d.ts
 // src/inference/tts.ts:282:5 - (ae-forgotten-export) The symbol "TTSEncoding" needs to be exported by the entry point index.d.ts
 // src/llm/chat_context.ts:80:3 - (ae-unresolved-link) The @link reference could not be resolved: The package "@livekit/agents" does not have an export "audio"
-// src/llm/tool_context.ts:702:3 - (ae-unresolved-link) The @link reference could not be resolved: The reference is ambiguous because "ToolFlag" has more than one declaration; you need to add a TSDoc member reference selector
-// src/llm/tool_context.ts:746:3 - (ae-unresolved-link) The @link reference could not be resolved: The reference is ambiguous because "ToolFlag" has more than one declaration; you need to add a TSDoc member reference selector
+// src/llm/tool_context.ts:708:3 - (ae-unresolved-link) The @link reference could not be resolved: The reference is ambiguous because "ToolFlag" has more than one declaration; you need to add a TSDoc member reference selector
+// src/llm/tool_context.ts:755:3 - (ae-unresolved-link) The @link reference could not be resolved: The reference is ambiguous because "ToolFlag" has more than one declaration; you need to add a TSDoc member reference selector
 // src/metrics/base.ts:213:3 - (ae-forgotten-export) The symbol "RealtimeModelMetricsInputTokenDetails" needs to be exported by the entry point index.d.ts
 // src/metrics/base.ts:217:3 - (ae-forgotten-export) The symbol "RealtimeModelMetricsOutputTokenDetails" needs to be exported by the entry point index.d.ts
 // src/stt/stt.ts:378:3 - (ae-unresolved-link) The @link reference could not be resolved: The package "@livekit/agents" does not have an export "STT"
