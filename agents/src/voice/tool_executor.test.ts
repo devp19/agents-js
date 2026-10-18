@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2026 LiveKit, Inc.
 //
 // SPDX-License-Identifier: Apache-2.0
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 import { ChatContext, FunctionCall } from '../llm/chat_context.js';
 import { ToolError, ToolFlag, tool } from '../llm/tool_context.js';
@@ -229,6 +229,44 @@ describe('ToolExecutor', () => {
           );
         }
       } finally {
+        await session.close();
+      }
+    },
+  );
+
+  it.each([null, undefined, 'finished'])(
+    'settles a run on close while its completion reply waits for foreground work (%s)',
+    async (output) => {
+      const holdStarted = new Future<void>();
+      const releaseHold = new Future<void>();
+      const lookup = tool({
+        name: 'lookup',
+        description: '',
+        execute: async (_, { ctx }) => {
+          await ctx.update('working');
+          return output;
+        },
+      });
+      const session = new AgentSession({
+        llm: new FakeLLM([{ input: 'lookup', toolCalls: [{ name: 'lookup', args: {} }] }]),
+        vad: null,
+      });
+      await session.start({ agent: new Agent({ instructions: 'test', tools: [lookup] }) });
+      const executor = session._activity!._toolExecutor;
+      const hold = session.waitForIdleAndHold(async () => {
+        holdStarted.resolve();
+        await releaseHold.await;
+      });
+      try {
+        await holdStarted.await;
+        const run = session.run({ userInput: 'lookup' });
+        await vi.waitFor(() => expect(executor.replyTask).toBeDefined());
+        await session.close();
+        await vi.waitFor(() => expect(run.done()).toBe(true));
+        await run.wait();
+      } finally {
+        releaseHold.resolve();
+        await hold;
         await session.close();
       }
     },

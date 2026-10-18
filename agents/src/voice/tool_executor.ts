@@ -19,7 +19,7 @@ import {
   tool,
 } from '../llm/tool_context.js';
 import { log } from '../log.js';
-import { Future, Task } from '../utils.js';
+import { Future, Task, waitUntilAborted } from '../utils.js';
 import type { AgentSession } from './agent_session.js';
 import type { PromptTemplate, RunContext, UpdatePromptArgs } from './run_context.js';
 import { isStopResponse } from './stop_response.js';
@@ -159,7 +159,7 @@ export class ToolExecutor {
   private runningTasks = new Map<string, RunningTask>();
   private duplicateLock = new Mutex();
   private pendingUpdates: PendingUpdate[] = [];
-  private _replyTask?: Promise<void>;
+  private _replyTask?: Task<void>;
   private _replyTaskDone = false;
   toolOptions: AsyncToolOptions;
 
@@ -177,7 +177,7 @@ export class ToolExecutor {
   private owningActivity: ToolExecutorActivity | null;
 
   get replyTask(): Promise<void> | undefined {
-    return this._replyTask;
+    return this._replyTask?.result;
   }
 
   setOwningActivity(activity: ToolExecutorActivity | null): void {
@@ -300,7 +300,7 @@ export class ToolExecutor {
 
   async waitForAll(): Promise<void> {
     await Promise.allSettled([...this.runningTasks.values()].map((task) => task.promise));
-    if (this._replyTask) await this._replyTask;
+    if (this._replyTask) await this._replyTask.result;
   }
 
   async cancel(callId: string): Promise<boolean> {
@@ -406,6 +406,8 @@ export class ToolExecutor {
 
   async aclose(): Promise<void> {
     this.pendingUpdates = [];
+    const replyTask = this._replyTask;
+    replyTask?.cancel();
     const tasks = [...this.runningTasks.values()];
     for (const task of tasks) {
       task.controller.abort();
@@ -416,6 +418,7 @@ export class ToolExecutor {
       void task.promise.catch(() => undefined);
     }
     this.runningTasks.clear();
+    await replyTask?.result;
   }
 
   async enqueueReply(
@@ -431,9 +434,9 @@ export class ToolExecutor {
     this.pendingUpdates.push({ ctx, items, target });
     if (this._replyTask === undefined || this._replyTaskDone) {
       this._replyTaskDone = false;
-      const replyTask = Task.from(async () => {
+      const replyTask = Task.from(async ({ signal }) => {
         try {
-          await this.deliverReply(ctx.session);
+          await this.deliverReply(ctx.session, signal);
         } catch (error) {
           log().warn(
             { error },
@@ -441,7 +444,7 @@ export class ToolExecutor {
           );
         }
       });
-      this._replyTask = replyTask.result;
+      this._replyTask = replyTask;
       ctx.session._globalRunState?._watchHandle(replyTask);
     }
   }
@@ -583,13 +586,14 @@ export class ToolExecutor {
     return undefined;
   }
 
-  private async deliverReply(session: AgentSession): Promise<void> {
+  private async deliverReply(session: AgentSession, signal: AbortSignal): Promise<void> {
     try {
       if (this.owningActivity) {
-        await this.owningActivity.waitForIdle();
+        await waitUntilAborted(this.owningActivity.waitForIdle(), signal);
       } else if ('waitForIdle' in session && typeof session.waitForIdle === 'function') {
-        await session.waitForIdle();
+        await waitUntilAborted(session.waitForIdle(), signal);
       }
+      if (signal.aborted) return;
 
       const updates = [...this.pendingUpdates];
       this.pendingUpdates = [];
